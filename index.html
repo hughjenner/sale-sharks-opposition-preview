@@ -749,6 +749,16 @@
     .watchlist-grid{
       grid-template-columns:1fr;
     }
+    .controls{
+      gap:12px 16px;
+    }
+    .controls .pool-field{
+      flex:1 1 220px;
+    }
+    .dropdown-trigger{
+      max-width:none;
+      width:100%;
+    }
   }
   /* Phone-width tightening. Added 2026-08-21. The dashboard is a dense
      multi-column stats layout; below 480px this keeps the top controls,
@@ -784,6 +794,20 @@
     table.sel-table{ min-width:340px; }
     table.coh-table{ min-width:240px; }
     .coh-table thead th.coh-label-head{ width:70px; }
+    /* Kick Map view toggle + type filters (added 2026-08-25 for the Kick
+       Offs feature) — give the toggle buttons a full-width, evenly-split
+       layout with a real touch target instead of the cramped inline pill
+       used at desktop widths. */
+    .km-view-toggle{ width:100%; }
+    .km-view-btn{ flex:1; padding:9px 8px; font-size:13px; }
+    .km-type-filters{ gap:10px 14px; row-gap:8px; }
+    .km-type-chip{ font-size:12px; }
+    .va-subbar-tag{ min-width:74px; font-size:9px; }
+    .va-row-multi .va-row-label{ font-size:12px; }
+    .standout-list li, .matchup-list li{ padding:8px 12px; font-size:12px; }
+    .watchlist-player{ padding:12px 14px; }
+    .wp-name{ font-size:13px; }
+    footer{ font-size:11px; padding:0 8px; }
   }
   .watchlist-card{
     max-width:1200px;
