@@ -3634,6 +3634,18 @@ function renderSelections(teamName){
     return `<th class="${resClass}">${resLabel}</th>`;
   }).join("");
 
+  // Bench rows normally run 16-23 (a standard 8-man matchday bench), but
+  // pre-season fixtures can name a much larger squad-rotation "bench" (seen
+  // 2026-08-27: Bath's Perpignan pre-season game named 17 replacements,
+  // numbered 16-32). Size the bench section to whatever the widest bench is
+  // across the games currently shown, never shrinking below the normal 23.
+  const maxBenchNum = selectedGames.reduce((max, g) => {
+    const nums = (g.bench || []).map(b => b.num);
+    return nums.length ? Math.max(max, ...nums) : max;
+  }, 23);
+  const benchNums = [];
+  for (let n = 16; n <= maxBenchNum; n++) benchNums.push(n);
+
   const bodyRows = [
     sel_playerRow(selectedGames, 1, "starters"),
     sel_playerRow(selectedGames, 2, "starters"),
@@ -3652,7 +3664,7 @@ function renderSelections(teamName){
     sel_playerRow(selectedGames, 14, "starters"),
     sel_playerRow(selectedGames, 15, "starters"),
     sel_divider(colCount),
-    ...[16,17,18,19,20,21,22,23].map(n => sel_playerRow(selectedGames, n, "bench")),
+    ...benchNums.map(n => sel_playerRow(selectedGames, n, "bench")),
   ].join("");
 
   // ---- right table: cohesion breakdown, same games as columns ----
