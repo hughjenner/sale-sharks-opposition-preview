@@ -3456,17 +3456,35 @@ function rankFillColorScaled(rank, poolSize){
 // "good" or "bad", but ranking it the same way as every other row keeps the visual
 // language consistent.
 const ZONE_TO_RUCKKEY = { "Own 22": "own22", "Own Half": "own22tohalfway", "Opp Half": "halfwaytoopp22", "Opp 22m": "opp22" };
+function ruckZonePool(teamName){
+  const zones = RAW_DATA.ruckZones;
+  if (!zones) return [];
+  // Scoped to the currently-selected competition(s)/countries (fixed 2026-09-04 per Hugh —
+  // previously ranked/leadered across the full ~42-team club pool regardless of the league
+  // filter, which let e.g. Glasgow Warriors (URC) show as "leader" while viewing Premiership
+  // opponents). Sale Sharks and the viewed team are always folded in, same pattern as
+  // computeActivePool/computeStatsForRow's leagueEntries split, so their own value/rank still
+  // display even if their competition isn't currently selected.
+  return Object.keys(zones).filter(t => t === "Sale Sharks" || t === teamName || isTeamInLeagueSelection(t));
+}
+
 function ruckZoneStat(zoneKey, teamName){
   const zones = RAW_DATA.ruckZones;
   if (!zones || !zoneKey) return null;
-  const entries = Object.keys(zones)
+  const pool = ruckZonePool(teamName);
+  const entries = pool
     .map(t => ({ t, v: zones[t] && zones[t][zoneKey] }))
     .filter(e => typeof e.v === "number");
   if (!entries.length) return null;
   entries.sort((a, b) => b.v - a.v);
   const idx = entries.findIndex(e => e.t === teamName);
   if (idx === -1) return null;
-  return { value: entries[idx].v, rank: idx + 1, poolSize: entries.length, max: entries[0].v, leaderTeam: entries[0].t };
+  // Leader must come from teams actually inside the selected competition(s) - Sale/the viewed
+  // opponent are forced into `pool` above so their own rank still shows, but they must not be
+  // able to "win" the leader tag for a competition they aren't actually part of.
+  const leagueEntries = entries.filter(e => isTeamInLeagueSelection(e.t));
+  const leaderEntry = (leagueEntries.length ? leagueEntries : entries)[0];
+  return { value: entries[idx].v, rank: idx + 1, poolSize: entries.length, max: leaderEntry.v, leaderTeam: leaderEntry.t };
 }
 
 function speedMapSVG(teamName){
@@ -3598,7 +3616,8 @@ function renderSpeedMap(teamName){
   `;
 
   pitchEl.innerHTML = speedMapSVG(teamName);
-  metaEl.textContent = `Ruck speed (seconds) and rucks played per 80 mins by pitch zone, own 22 to opposition 22 — Sale vs ${teamName}. Leader value shown per zone; rucks/80 ranked across the full ${(RAW_DATA.ruckZones ? Object.keys(RAW_DATA.ruckZones).length : 42)}-team pool.`;
+  const ruckPoolSize = RAW_DATA.ruckZones ? ruckZonePool(teamName).length : 0;
+  metaEl.textContent = `Ruck speed (seconds) and rucks played per 80 mins by pitch zone, own 22 to opposition 22 — Sale vs ${teamName}. Leader value shown per zone; rucks/80 ranked within the currently selected competition(s) (${ruckPoolSize}-team pool).`;
 }
 
 function renderKickoffTypeFilters(){
