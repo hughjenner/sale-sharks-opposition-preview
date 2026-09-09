@@ -1018,6 +1018,9 @@
   .rank-1, .rank-2, .rank-3{color:var(--good); background:rgba(47,158,92,0.18);}
   .rank-4, .rank-5, .rank-6, .rank-7{color:var(--mid); background:rgba(217,165,47,0.18);}
   .rank-8, .rank-9, .rank-10{color:var(--bad); background:rgba(209,69,59,0.18);}
+    .rank-good{color:var(--good); background:rgba(47,158,92,0.18);}
+    .rank-mid{color:var(--mid); background:rgba(217,165,47,0.18);}
+    .rank-bad{color:var(--bad); background:rgba(209,69,59,0.18);}
   footer{
     max-width:1200px;
     margin:26px auto 0;
@@ -1602,6 +1605,8 @@ let CURRENT_TEAM = "Bristol Bears";
 let ACTIVE_SECTIONS = [];
 let ACTIVE_HEADLINE = [];
 let H2H_MODE = false; // Head-to-head-vs-Sale-only toggle (added 2026-08-04)
+let CURRENT_RANK_OF = 0; // size of the pool the current render ranked against (added 2026-09-09,
+                         // fallback for any rank pill whose row didn't carry its own rankOf)
 let H2H_CHECKED = {}; // team -> array<bool> of which meetings are ticked in the per-game checklist (added 2026-09-08)
 
 const COUNTRY_LIST = ["England", "France", "Ireland", "Scotland", "Wales", "Italy", "South Africa", "Georgia", "New Zealand", "Australia", "Argentina", "Fiji", "Japan"];
@@ -1694,7 +1699,7 @@ function computeStatsForRow(row, pool){
     lastN = e.rec.n; lastRank = rank;
     const rawZ = (e.rec.n - mean) / std;
     const z = row.direction === "low" ? -rawZ : rawZ;
-    perTeamOut[e.t] = { value: e.rec.display, n: e.rec.n, rank, z };
+    perTeamOut[e.t] = { value: e.rec.display, n: e.rec.n, rank, z, rankOf: entries.length };
   });
 
   // Second rank badge for dualLeader rows (added 2026-09-01 per Hugh): rows like RAC "Tackle
@@ -1711,7 +1716,7 @@ function computeStatsForRow(row, pool){
       if (lastN2 !== null && e.rec.n2 === lastN2){ rank2 = lastRank2; }
       else { rank2 = i + 1; }
       lastN2 = e.rec.n2; lastRank2 = rank2;
-      if (perTeamOut[e.t]) perTeamOut[e.t].rank2 = rank2;
+      if (perTeamOut[e.t]) { perTeamOut[e.t].rank2 = rank2; perTeamOut[e.t].rankOf2 = entries2.length; }
     });
   }
 
@@ -2734,13 +2739,31 @@ function renderPoolSummary(pool, useH2H, teamName){
   el.innerHTML = groupsHtml;
 }
 
-function rankClass(rank){
-  // In H2H mode the pool is always exactly [Sale Sharks, opponent], so rank
-  // can only be 1 or 2. Rank 2 there means "worse of the two" and should
-  // read as bad (red), not fall into the normal-pool "top 3 = green" band.
-  // Added 2026-08-20.
-  if (H2H_MODE && rank === 2) return "rank-8";
-  return "rank-" + rank;
+// Proportional rank banding (rewritten 2026-09-09 per Hugh). Previously rankClass returned
+// "rank-" + the literal rank number and the stylesheet only defined .rank-1 .. .rank-10,
+// hardcoded to the 10-team Premiership pool. Once two competitions were selected (e.g. TOP14
+// + PREM CUP = 24 teams) that broke twice over: 8th still painted red because .rank-8 was a
+// red rule written for a 10-team pool, while 13th matched NO rule at all and fell back to
+// plain white. Bands are now computed from the actual number of teams ranked on that row.
+//
+// The 0.3 / 0.7 split is chosen to reproduce the old thresholds exactly at the 10-team pool
+// everyone is used to (green 1-3, amber 4-7, red 8-10) while scaling sensibly to any size.
+function rankBandClass(rank, rankOf){
+  if (rank == null) return "rank-mid";
+  const n = (typeof rankOf === "number" && rankOf > 0) ? rankOf : CURRENT_RANK_OF;
+  // In H2H mode the pool is always exactly [Sale Sharks, opponent], so rank can only be 1 or
+  // 2. Rank 2 there means "worse of the two" and should read as bad (red), not fall into a
+  // "top third = green" band. Added 2026-08-20, preserved through the 2026-09-09 rewrite.
+  if (H2H_MODE && (!n || n <= 2)) return rank === 1 ? "rank-good" : "rank-bad";
+  if (!n || n < 2) return "rank-good";
+  const goodMax = Math.max(1, Math.round(n * 0.3));
+  const midMax = Math.max(goodMax, Math.round(n * 0.7));
+  if (rank <= goodMax) return "rank-good";
+  if (rank <= midMax) return "rank-mid";
+  return "rank-bad";
+}
+function rankClass(rank, rankOf){
+  return rankBandClass(rank, rankOf);
 }
 
 function ordinal(n){
@@ -2838,6 +2861,7 @@ function computeStandouts(teamName){
         note: row.note,
         value: entry.value,
         rank: entry.rank,
+        rankOf: entry.rankOf,
         z: entry.z
       });
     });
@@ -2865,7 +2889,7 @@ function renderStandouts(teamName){
         </div>
         <div class="standout-right">
           <span>${it.value}</span>
-          <span class="rank-pill ${rankClass(it.rank)}">${ordinal(it.rank)}</span>
+          <span class="rank-pill ${rankClass(it.rank, it.rankOf)}">${ordinal(it.rank)}</span>
           <span class="sigma-badge tooltip-trigger" data-tooltip="${zDef}">${formatSigma(it.z)}</span>
         </div>
       </li>
@@ -2898,8 +2922,10 @@ function computeMatchup(teamName){
         note: row.note,
         saleValue: sale.value,
         saleRank: sale.rank,
+        saleRankOf: sale.rankOf,
         oppValue: opp.value,
         oppRank: opp.rank,
+        oppRankOf: opp.rankOf,
         edge: sale.z - opp.z
       });
     });
@@ -2928,8 +2954,8 @@ function renderMatchupAnalysis(teamName){
           <span class="edge-badge ${edgeClass} tooltip-trigger" data-tooltip="${edgeDef}">${sign}${it.edge.toFixed(1)}σ edge</span>
         </div>
         <div class="matchup-row-bottom">
-          <div class="matchup-side"><span class="side-tag">SAL</span><span class="side-value">${it.saleValue}</span><span class="rank-pill ${rankClass(it.saleRank)}">${ordinal(it.saleRank)}</span></div>
-          <div class="matchup-side"><span class="side-tag">${RAW_DATA.abbrev[teamName] || "OPP"}</span><span class="side-value">${it.oppValue}</span><span class="rank-pill ${rankClass(it.oppRank)}">${ordinal(it.oppRank)}</span></div>
+          <div class="matchup-side"><span class="side-tag">SAL</span><span class="side-value">${it.saleValue}</span><span class="rank-pill ${rankClass(it.saleRank, it.saleRankOf)}">${ordinal(it.saleRank)}</span></div>
+          <div class="matchup-side"><span class="side-tag">${RAW_DATA.abbrev[teamName] || "OPP"}</span><span class="side-value">${it.oppValue}</span><span class="rank-pill ${rankClass(it.oppRank, it.oppRankOf)}">${ordinal(it.oppRank)}</span></div>
         </div>
       </li>
     `;
@@ -3733,10 +3759,11 @@ function renderKickMap(teamName){
   metaEl.textContent = `Showing ${filtered.length} kicks across ${gamesLabel} (${playerLabel})${kicksRefreshedNote}`;
 }
 
-function rankFillColor(rank){
-  if (rank <= 3) return "rgba(47,158,92,0.85)";
-  if (rank <= 7) return "rgba(217,165,47,0.85)";
-  return "rgba(209,69,59,0.85)";
+const RANK_FILL = { "rank-good": "rgba(47,158,92,0.85)", "rank-mid": "rgba(217,165,47,0.85)", "rank-bad": "rgba(209,69,59,0.85)" };
+// Pool-size-aware as of 2026-09-09 (was a fixed <=3 / <=7 split written for the 10-team
+// Premiership pool, which painted almost everything red once a second competition was added).
+function rankFillColor(rank, rankOf){
+  return RANK_FILL[rankBandClass(rank, rankOf)];
 }
 
 // Pool-size-aware version of rankFillColor, added 2026-08-28 for the RUCKS/80 boxes on the
@@ -3745,11 +3772,9 @@ function rankFillColor(rank){
 // above would paint almost every team red. This splits whatever pool size into thirds instead,
 // giving the same three-tier green/amber/red visual language real variation at any pool size.
 function rankFillColorScaled(rank, poolSize){
-  if (!poolSize) return rankFillColor(rank);
-  const third = poolSize / 3;
-  if (rank <= third) return "rgba(47,158,92,0.85)";
-  if (rank <= third * 2) return "rgba(217,165,47,0.85)";
-  return "rgba(209,69,59,0.85)";
+  // Now just delegates to the shared banding so the pitch-map boxes and the rank pills use
+  // one definition of green/amber/red (unified 2026-09-09).
+  return RANK_FILL[rankBandClass(rank, poolSize)];
 }
 
 // Rucks-per-80 by pitch zone (added 2026-08-28). RAW_DATA.ruckZones[team][zoneKey] is a
@@ -3864,7 +3889,7 @@ function speedMapSVG(teamName){
       // not the ~10-team pool Speed's plain rankFillColor was calibrated for.
 
       // ---- TOP HALF: Sale ----
-      svg += `<rect x="${cx-10}" y="1" width="20" height="16" rx="2" fill="${rankFillColor(sale.rank)}" opacity="0.92" />`;
+      svg += `<rect x="${cx-10}" y="1" width="20" height="16" rx="2" fill="${rankFillColor(sale.rank, sale.rankOf)}" opacity="0.92" />`;
       svg += `<text x="${cx}" y="6.2" text-anchor="middle" font-size="2.8" fill="#08150d" font-weight="700">SAL</text>`;
       svg += `<text x="${cx}" y="13.8" text-anchor="middle" font-size="3.8" fill="#08150d" font-weight="800">${sale.value}s <tspan font-size="2.6" font-weight="700">(${ordinal(sale.rank)})</tspan></text>`;
 
@@ -3873,7 +3898,7 @@ function speedMapSVG(teamName){
       svg += `<text x="${cx}" y="30.8" text-anchor="middle" font-size="3.8" fill="#08150d" font-weight="800">${saleRucks ? `${saleRucks.value} <tspan font-size="2.6" font-weight="700">(${ordinal(saleRucks.rank)})</tspan>` : "-"}</text>`;
 
       // ---- BOTTOM HALF: opponent (mirrored, +35 offset) ----
-      svg += `<rect x="${cx-10}" y="36" width="20" height="16" rx="2" fill="${rankFillColor(opp.rank)}" opacity="0.92" />`;
+      svg += `<rect x="${cx-10}" y="36" width="20" height="16" rx="2" fill="${rankFillColor(opp.rank, opp.rankOf)}" opacity="0.92" />`;
       svg += `<text x="${cx}" y="41.2" text-anchor="middle" font-size="2.8" fill="#08150d" font-weight="700">${RAW_DATA.abbrev[teamName] || "OPP"}</text>`;
       svg += `<text x="${cx}" y="48.8" text-anchor="middle" font-size="3.8" fill="#08150d" font-weight="800">${opp.value}s <tspan font-size="2.6" font-weight="700">(${ordinal(opp.rank)})</tspan></text>`;
 
@@ -3901,11 +3926,11 @@ function renderSpeedMap(teamName){
     overallEl.innerHTML = `
       <div class="sm-stat">
         <span class="sm-label">Overall — Sale</span>
-        <span class="sm-value">${sale.value}s <span class="rank-pill ${rankClass(sale.rank)}">${ordinal(sale.rank)}</span></span>
+        <span class="sm-value">${sale.value}s <span class="rank-pill ${rankClass(sale.rank, sale.rankOf)}">${ordinal(sale.rank)}</span></span>
       </div>
       <div class="sm-stat">
         <span class="sm-label">Overall — ${teamName}</span>
-        <span class="sm-value">${opp.value}s <span class="rank-pill ${rankClass(opp.rank)}">${ordinal(opp.rank)}</span></span>
+        <span class="sm-value">${opp.value}s <span class="rank-pill ${rankClass(opp.rank, opp.rankOf)}">${ordinal(opp.rank)}</span></span>
       </div>
       <div class="sm-stat">
         <span class="sm-label">Pool Leader</span>
@@ -3975,6 +4000,7 @@ function render(teamName){
   refreshH2HMeetingsPanel(teamName);
   const useH2H = H2H_MODE && h2hAvailable(teamName);
   const pool = useH2H ? ["Sale Sharks", teamName] : computeActivePool(teamName);
+  CURRENT_RANK_OF = pool.length;
   ACTIVE_SECTIONS = useH2H ? computeActiveSectionsH2H(teamName) : computeActiveSections(pool, teamName);
   ACTIVE_HEADLINE = useH2H ? computeActiveHeadlineH2H(teamName) : computeActiveHeadline(pool);
   renderPoolSummary(pool, useH2H, teamName);
@@ -4014,7 +4040,7 @@ function render(teamName){
       return `
         <div class="stat">
           <div class="label">${h.metric}${h.note ? ` <span style="opacity:0.7;">${h.note}</span>` : ""}</div>
-          <div class="value">${opp.value} <span class="rank-pill ${rankClass(opp.rank)}">${ordinal(opp.rank)}</span></div>
+          <div class="value">${opp.value} <span class="rank-pill ${rankClass(opp.rank, opp.rankOf)}">${ordinal(opp.rank)}</span></div>
         </div>
       `;
     }).join("")}
@@ -4071,8 +4097,8 @@ function dualCell(c){
   const parts = String(c.value).split("<br>");
   const top = parts.length > 0 ? parts[0] : c.value;
   const bottom = parts.length > 1 ? parts[1] : "";
-  const pill1 = c.rank != null ? ` <span class="rank-pill ${rankClass(c.rank)}">${ordinal(c.rank)}</span>` : "";
-  const pill2 = c.rank2 != null ? ` <span class="rank-pill ${rankClass(c.rank2)}">${ordinal(c.rank2)}</span>` : "";
+  const pill1 = c.rank != null ? ` <span class="rank-pill ${rankClass(c.rank, c.rankOf)}">${ordinal(c.rank)}</span>` : "";
+  const pill2 = c.rank2 != null ? ` <span class="rank-pill ${rankClass(c.rank2, c.rankOf2)}">${ordinal(c.rank2)}</span>` : "";
   return `${top}${pill1}<br>${bottom}${pill2}`;
 }
 
@@ -4080,7 +4106,7 @@ function normalCell(c){
   // rank can legitimately be null (e.g. H2H mode showing a row with no head-to-head data
   // pulled yet, like Value Added breakdowns) — omit the pill instead of rendering "nullth".
   if (c.rank == null) return `${c.value}`;
-  return `${c.value} <span class="rank-pill ${rankClass(c.rank)}">${ordinal(c.rank)}</span>`;
+  return `${c.value} <span class="rank-pill ${rankClass(c.rank, c.rankOf)}">${ordinal(c.rank)}</span>`;
 }
 function dynamicRankClass(rank, of){
   if (rank == null || !of) return "";
