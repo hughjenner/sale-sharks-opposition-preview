@@ -1105,80 +1105,91 @@
    or an extra tracked game never spills onto a second page - see that function for the
    scale-to-fit math. */
 #print-root{ display:none; }
+/* These two rules are deliberately OUTSIDE @media print (added 2026-09-11 per Hugh, after the
+   print came out shrunk into a small corner of the page). printSelectionsTable() measures the
+   content off-screen with the SCREEN stylesheet applied - it sets #print-root to display:block
+   at left:-99999px and reads .print-inner's scrollWidth/scrollHeight to compute the
+   scale-to-fit-one-page factor. When .print-bg's absolute positioning lived only inside
+   @media print, the SVG was still IN FLOW during that measurement, and an <svg> with a
+   viewBox but no CSS size resolves to width:100% with height from the 1:1 viewBox aspect -
+   i.e. roughly a 1000x1000px block wedged into the header. That inflated contentH from ~650px
+   to ~1650px, so scale collapsed to about 0.39 and the whole table printed at 39% size.
+   Keeping .print-bg out of flow at all times makes the measurement match the printed layout. */
+#print-root .print-inner{ position:relative; }
+#print-root .print-header{
+  position:relative;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  display:block;
+  font-size:20px;
+  font-weight:800;
+  padding:9px 12px;
+  margin:0 0 10px 0;
+  border-radius:4px;
+  text-transform:uppercase;
+  letter-spacing:0.03em;
+  overflow:hidden;
+}
+#print-root .print-bg{
+  position:absolute;
+  left:0; top:0;
+  width:100%; height:100%;
+  z-index:0;
+}
+#print-root .print-header-title{ position:relative; z-index:1; }
+#print-root table{ width:100%; border-collapse:collapse; font-size:13px; }
+#print-root th, #print-root td{ border:1px solid rgba(0,0,0,0); padding:3px 6px; }
+#print-root .sel-divider td{ border:none; padding:3px 0; }
+#print-root .sel-result-row th{ border-bottom:2.5px solid rgba(0,0,0,0); }
 @media print{
   @page{ size:landscape; margin:10mm; }
   body.printing-selections > *:not(#print-root){ display:none !important; }
-  /* Revised 2026-09-11 per Hugh: match the navy-to-orange gradient/white-text colourway
-     used elsewhere (post-game stats graphics), remove the white panel the table used to
-     sit on, and fix a real bug where .print-header-sub inherited a solid white background
-     from the broad reset below (invisible white-on-white text - "the other white box"). */
+  /* Revised 2026-09-11 (third pass) per Hugh. Layout is now: a blue-to-orange gradient band
+     for the HEADER ONLY, then a plain white page beneath it with DARK BLUE text and dark blue
+     table rules. The two thead rows (opposition, then result/score) are dark blue and bold so
+     they read as a header block, with a heavier blue rule under them separating them from the
+     player rows. The "Printed <date>" sub-label is gone entirely - Hugh asked for it removed.
+     Deliberately NO background fills below the header: Hugh prints with "Background graphics"
+     UNTICKED, so any CSS background silently disappears. White paper + dark ink needs no
+     background at all, which is why this version is robust rather than merely lucky. The one
+     coloured element left - the header gradient - is drawn as an inline SVG (.print-bg, real
+     content, always prints) with the CSS gradient kept behind it as a harmless double-up. */
   #print-root{
     display:block !important;
     position:relative;
-    padding:16px 18px;
-    background:#123f7a !important;
-    background-color:#123f7a !important;
-    background-image:linear-gradient(90deg, #0b3d91 0%, #123f7a 35%, #b5601f 75%, #d9782f 100%) !important;
+    padding:0;
+    background:#fff !important;
+    background-color:#fff !important;
     -webkit-print-color-adjust:exact !important;
     print-color-adjust:exact !important;
   }
-  /* Printed-gradient fallback (added 2026-09-11 per Hugh). The gradient above is a CSS
-     BACKGROUND, and browsers drop CSS backgrounds when "Background graphics" is unticked in
-     the print dialog - which left white text on white paper, so the page came out blank
-     apart from the colour-coded W/L/D/LIVE scores (the only cells with their own colour).
-     .print-bg is an inline SVG injected by printSelectionsTable(), i.e. real CONTENT rather
-     than a background, so it prints either way. When backgrounds ARE enabled the CSS
-     gradient simply sits behind it identically - no visual difference. */
-  #print-root .print-bg{
-    position:absolute;
-    left:0; top:0;
-    width:100%; height:100%;
-    z-index:0;
-    display:block !important;
-  }
-  #print-root .print-inner{ position:relative; z-index:1; }
-  /* Everything sits directly on the gradient - no boxed/white panels behind any text.
-     Default text is white; only the result-colour rules further down override it. */
+  /* Reset: strip the dark-theme fills, and default ALL text to dark blue. The header rule
+     below flips its own text back to white, and the result-colour rules override the score row. */
   #print-root, #print-root *{
     background:none !important;
     background-color:transparent !important;
     background-image:none !important;
-    color:#fff !important;
+    color:#0b3d91 !important;
     box-shadow:none !important;
     text-shadow:none !important;
   }
   #print-root .print-header{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    display:flex !important;
-    align-items:baseline;
-    justify-content:space-between;
-    gap:12px;
-    font-size:22px;
-    font-weight:800;
-    padding:0 0 12px 0;
-    margin:0 0 10px 0;
-    border-bottom:1px solid rgba(255,255,255,0.25);
-    text-transform:uppercase;
-    letter-spacing:0.03em;
+    background:#123f7a !important;
+    background-color:#123f7a !important;
+    background-image:linear-gradient(90deg, #0b3d91 0%, #123f7a 25%, #b5601f 62%, #d9782f 100%) !important;
   }
-  #print-root .print-header .print-header-sub{
-    font-size:11px;
-    font-weight:600;
-    text-transform:none;
-    letter-spacing:normal;
-    opacity:0.85;
-    white-space:nowrap;
-  }
-  #print-root table{ width:100%; border-collapse:collapse; font-size:10.5px; }
-  #print-root th, #print-root td{ border:1px solid rgba(255,255,255,0.25) !important; padding:2.5px 5px; }
-  #print-root .sel-divider td{ border:none !important; padding:3px 0 !important; }
-  /* Coloured font for W/L/D/live (replaces the on-screen tinted-background badges, which
-     would otherwise be wiped to plain white-on-transparent by the reset above) - brightened
-     versions of the dashboard's --good/--bad/--mid so they still read clearly on the gradient. */
-  #print-root th.res-W, #print-root .res-W{ color:#4ade80 !important; font-weight:800; }
-  #print-root th.res-L, #print-root .res-L{ color:#ff6b6b !important; font-weight:800; }
-  #print-root th.res-D, #print-root .res-D{ color:#ffd166 !important; font-weight:800; }
-  #print-root th.res-live, #print-root .res-live{ color:#ffd166 !important; font-weight:800; }
+  #print-root .print-header .print-bg{ display:block !important; }
+  #print-root .print-header .print-header-title{ color:#fff !important; }
+  #print-root th, #print-root td{ border-color:#0b3d91 !important; }
+  #print-root .sel-divider td{ border:none !important; }
+  /* The two header rows: dark blue and bold, with a heavier rule closing the block off. */
+  #print-root thead th{ color:#0b3d91 !important; font-weight:800; }
+  #print-root .sel-result-row th{ border-bottom-color:#0b3d91 !important; }
+  /* W/L/D/LIVE keep their colour coding, in darker shades that read on white paper (the
+     previous values were brightened for a dark background and are far too pale on white). */
+  #print-root th.res-W, #print-root .res-W{ color:#15803d !important; font-weight:800; }
+  #print-root th.res-L, #print-root .res-L{ color:#b91c1c !important; font-weight:800; }
+  #print-root th.res-D, #print-root .res-D{ color:#a16207 !important; font-weight:800; }
+  #print-root th.res-live, #print-root .res-live{ color:#a16207 !important; font-weight:800; }
 }
 
 .selections-sub{
@@ -2686,6 +2697,12 @@ function defaultLeaguesForCurrentSeason(){
   // back to whichever competitions DO have data (e.g. just "Premiership Cup" in the opening
   // weeks of a new season) while Premiership itself hasn't kicked off yet.
   if (available.includes("Premiership")) return new Set(["Premiership"]);
+  // Revised 2026-09-11 per Hugh: don't auto-tick Top 14. The blanket fallback above used to
+  // return EVERY competition with data, which in the opening weeks of 26/27 meant Premiership
+  // Cup AND Top 14 were both ticked on load - so the comparison pool and every rank/z-score
+  // baseline silently included 14 French clubs. Prefer the English competitions; Top 14, URC
+  // and the rest stay listed and selectable in the dropdown, just not selected for him.
+  if (available.includes("Premiership Cup")) return new Set(["Premiership Cup"]);
   return new Set(available);
 }
 function rebuildLeaguePanel(){
@@ -4264,18 +4281,18 @@ function printSelectionsTable(){
     root.id = "print-root";
     document.body.appendChild(root);
   }
-  const printedOn = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   root.innerHTML =
-    `<svg class="print-bg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden="true">` +
-      `<defs><linearGradient id="printBgGrad" x1="0" y1="0" x2="1" y2="0">` +
-        `<stop offset="0%" stop-color="#0b3d91"/><stop offset="35%" stop-color="#123f7a"/>` +
-        `<stop offset="75%" stop-color="#b5601f"/><stop offset="100%" stop-color="#d9782f"/>` +
-      `</linearGradient></defs>` +
-      `<rect x="0" y="0" width="100" height="100" fill="url(#printBgGrad)"/>` +
-    `</svg>` +
     `<div class="print-inner">` +
-    `<div class="print-header"><span>${CURRENT_TEAM} \u2014 Selections</span>` +
-    `<span class="print-header-sub">Printed ${printedOn}</span></div>` +
+    `<div class="print-header">` +
+      `<svg class="print-bg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden="true">` +
+        `<defs><linearGradient id="printBgGrad" x1="0" y1="0" x2="1" y2="0">` +
+          `<stop offset="0%" stop-color="#0b3d91"/><stop offset="25%" stop-color="#123f7a"/>` +
+          `<stop offset="62%" stop-color="#b5601f"/><stop offset="100%" stop-color="#d9782f"/>` +
+        `</linearGradient></defs>` +
+        `<rect x="0" y="0" width="100" height="100" fill="url(#printBgGrad)"/>` +
+      `</svg>` +
+      `<span class="print-header-title">${CURRENT_TEAM} \u2014 Selections</span>` +
+    `</div>` +
     selWrap.outerHTML +
     `</div>`;
   const inner = root.querySelector(".print-inner");
@@ -4286,19 +4303,31 @@ function printSelectionsTable(){
   // sized to the SMALLER of US-Letter and A4 landscape printable areas after the @page 10mm
   // margins, with a further ~10% safety margin, since the actual printer/paper size isn't
   // known up front. Never scales UP past 1 - a small table just prints at its natural size.
+  // Rewritten 2026-09-11 (per Hugh: "can it be a bit bigger to fit the page"). The old version
+  // measured the natural width and scaled to fit it. But the table is width:100%, so with
+  // #print-root unconstrained during the off-screen measurement it simply filled the BROWSER
+  // WINDOW - measured 1844px on a wide screen - and the width term then dominated the scale,
+  // giving 0.515. The print came out at half size with most of the page blank, and the factor
+  // silently depended on how wide Hugh's window happened to be.
+  // Now: pin the layout width to the printable page width, so the table always lays out to the
+  // full page, and only scale DOWN if the result is too tall. Output no longer depends on
+  // window size. TARGET_W is the narrower of A4/Letter landscape printable width at the @page
+  // 10mm margins (Letter ~980px) with a little slack; TARGET_H likewise (A4 ~718px).
+  const TARGET_W = 960, TARGET_H = 700;
   root.style.position = "fixed";
   root.style.left = "-99999px";
   root.style.top = "0";
   root.style.visibility = "hidden";
   root.style.display = "block";
+  root.style.width = "";
+  root.style.height = "";
+  inner.style.width = TARGET_W + "px";
   inner.style.transform = "none";
-  const contentW = inner.scrollWidth || 1;
   const contentH = inner.scrollHeight || 1;
-  const TARGET_W = 950, TARGET_H = 650; // px, see comment above
-  const scale = Math.min(TARGET_W / contentW, TARGET_H / contentH, 1);
+  const scale = Math.min(TARGET_H / contentH, 1);
   inner.style.transformOrigin = "top left";
   inner.style.transform = "scale(" + scale + ")";
-  root.style.width = Math.ceil(contentW * scale) + "px";
+  root.style.width = Math.ceil(TARGET_W * scale) + "px";
   root.style.height = Math.ceil(contentH * scale) + "px";
   root.style.position = "";
   root.style.left = "";
