@@ -1114,6 +1114,7 @@
      from the broad reset below (invisible white-on-white text - "the other white box"). */
   #print-root{
     display:block !important;
+    position:relative;
     padding:16px 18px;
     background:#123f7a !important;
     background-color:#123f7a !important;
@@ -1121,6 +1122,21 @@
     -webkit-print-color-adjust:exact !important;
     print-color-adjust:exact !important;
   }
+  /* Printed-gradient fallback (added 2026-09-11 per Hugh). The gradient above is a CSS
+     BACKGROUND, and browsers drop CSS backgrounds when "Background graphics" is unticked in
+     the print dialog - which left white text on white paper, so the page came out blank
+     apart from the colour-coded W/L/D/LIVE scores (the only cells with their own colour).
+     .print-bg is an inline SVG injected by printSelectionsTable(), i.e. real CONTENT rather
+     than a background, so it prints either way. When backgrounds ARE enabled the CSS
+     gradient simply sits behind it identically - no visual difference. */
+  #print-root .print-bg{
+    position:absolute;
+    left:0; top:0;
+    width:100%; height:100%;
+    z-index:0;
+    display:block !important;
+  }
+  #print-root .print-inner{ position:relative; z-index:1; }
   /* Everything sits directly on the gradient - no boxed/white panels behind any text.
      Default text is white; only the result-colour rules further down override it. */
   #print-root, #print-root *{
@@ -4249,7 +4265,15 @@ function printSelectionsTable(){
     document.body.appendChild(root);
   }
   const printedOn = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  root.innerHTML = `<div class="print-inner">` +
+  root.innerHTML =
+    `<svg class="print-bg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden="true">` +
+      `<defs><linearGradient id="printBgGrad" x1="0" y1="0" x2="1" y2="0">` +
+        `<stop offset="0%" stop-color="#0b3d91"/><stop offset="35%" stop-color="#123f7a"/>` +
+        `<stop offset="75%" stop-color="#b5601f"/><stop offset="100%" stop-color="#d9782f"/>` +
+      `</linearGradient></defs>` +
+      `<rect x="0" y="0" width="100" height="100" fill="url(#printBgGrad)"/>` +
+    `</svg>` +
+    `<div class="print-inner">` +
     `<div class="print-header"><span>${CURRENT_TEAM} \u2014 Selections</span>` +
     `<span class="print-header-sub">Printed ${printedOn}</span></div>` +
     selWrap.outerHTML +
